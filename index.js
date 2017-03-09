@@ -7,25 +7,24 @@ const parse = require('./lib/parse')
 
 const dbPromise = require('./lib/db');
 
-const save = (items)=> {
-    return new Promise((resolve, reject)=> {
-        dbPromise.then(db=> {
-            let house = db.collection('house')
-            let num = items.length, updates = 0, inserts = 0
+const save = (items) => {
+    return dbPromise.then(db => {
+        let house = db.collection('house')
+        let updates = 0, inserts = 0
 
-            for (let item of items) {
-                let _id = item._id;
-                if (!_id) return reject(new Error('_id is null: ' + JSON.stringify(item)))
-                delete item._id;
-                house.updateOne({_id: _id}, {$set: item}, {w: 1, upsert: true}, (err, result)=> {
-                    if (err) console.warn(err)
-                    else result.result.nModified == 1 ? updates++ : inserts++
-                    if (--num === 0) {
-                        resolve({inserts, updates})
-                    }
-                })
+        let promises = items.map(item => {
+            let _id = item._id
+            if (!_id) {
+                console.log('_id is null: ' + JSON.stringify(item))
+                return
             }
+            delete item._id
+            return house
+                .updateOne({_id: _id}, {$set: item}, {w: 1, upsert: true})
+                .then(result => void result.result.nModified == 1 ? updates++ : inserts++)
         })
+
+        return Promise.all(promises).then(() => ({inserts, updates}))
     })
 }
 
@@ -55,12 +54,10 @@ const capture = (tag = '/zufang/', page = 1, next)=> {
 }
 function main() {
     let data = require('./lib/data')
-    let tags = []
-    let page = 0, tagIndex = 0;
-
-    Object.keys(data).forEach(key=> {
-        tags = tags.concat(Object.keys(data[key].childs))
-    })
+    let page = 0, tagIndex = 0
+    let tags = Object.keys(data)
+        .map(key => Object.keys(data[key].childs))
+        .reduce((a,b) => a.concat(b))
 
     function next() {
         page++;
